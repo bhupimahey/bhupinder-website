@@ -1,0 +1,578 @@
+<?php
+namespace App\Controllers;
+use App\Models\AdmissionsModel;
+use App\Controllers\BaseController;
+use App\Libraries\auth_session;
+class Admissions extends BaseController
+{
+  function __construct()
+    {  
+	    helper(['form', 'url']);
+		$this->AdmissionsModel = new AdmissionsModel();		
+		$this->auth_session    = new auth_session();
+	    $this->auth_session->admin_restrict();
+	    $this->auth_session->role_restrict('S');
+    }
+  
+   public function getcategory_referred($category_id,$sel_id){
+	     echo $this->AdmissionsModel->ajax_referred_category_wise_list($category_id,$sel_id);	
+	 }
+	 
+   public function index()
+    {
+		$data['message_output']    = $this->message_output;
+		$data['all_doctors']       = array();
+		$data['all_category']      = $this->AdmissionsModel->AllCategoryDropdown();
+		$data['enquiry_type_list'] = enquiry_type_list();
+	    return view('admissions/view',$data);		
+    } 
+	
+	public function left()
+    {
+		$data['message_output']    = $this->message_output;
+		$data['all_doctors']       = $this->AdmissionsModel->AllDoctorsDropdown();
+		$data['enquiry_type_list'] = enquiry_type_list();
+	    return view('admissions/left',$data);		
+    }
+    
+  public  function ajax_admissions_view()
+	 {
+		echo $this->AdmissionsModel->ajax_admissions_list();		
+	 } 
+  
+  public function ajax_left_admissions_view()
+	 {
+		echo $this->AdmissionsModel->ajax_left_admissions_list();		
+	 }
+	
+   public function ajax_student_sessions_view()
+	 {
+		echo $this->AdmissionsModel->ajax_student_sessions_list();		
+	 }
+	 
+   public function student_view($student_id,$page_name='account')
+	 {
+		if(!$student_id)
+			return redirect()->to(base_url().'/admissions'); 	
+			
+		$student_info       = $this->AdmissionsModel->admission_detail_info($student_id);	
+		$billing_info       = $this->AdmissionsModel->student_billing_info($student_id);	
+		$notification_info  = $this->AdmissionsModel->student_notification_info($student_id);
+		$student_slots_info = $this->AdmissionsModel->student_slots_info($student_id);
+		
+		$student_comments   = $this->AdmissionsModel->get_studnet_comments($student_id);
+		$studnet_documents  = $this->AdmissionsModel->get_studnet_documents($student_id);
+		$studnet_pmt_meetings = $this->AdmissionsModel->get_studnet_pmt_meetings($student_id);
+		
+	
+		$data = array('student_info' => $student_info,'page_name' => $page_name,'student_id' => $student_id,'rooms_sessions_lists'=>rooms_sessions_lists(),
+		              'billing_info' => $billing_info,'notification_info' => $notification_info,
+		              'student_slots_info' => $student_slots_info,'AllTeacherssDropdown'=>$this->AdmissionsModel->AllTeacherssDropdown(),
+		              'all_doctors'  => $this->AdmissionsModel->AllDoctorsDropdown(),'student_comments'=>$student_comments,
+		              'student_documents'=>$studnet_documents,'studnet_pmt_meetings'=>$studnet_pmt_meetings
+		              );	
+		if($page_name=='sessions'){
+		   return view('admissions/student_sessions',$data);	  
+		   }
+		else if($page_name=='billing'){
+		    
+		    
+		   return view('admissions/student_billing',$data);	  
+		   } 
+		else if($page_name=='notifications'){
+		    
+		    
+		   return view('admissions/student_notifications',$data);	  
+		   }    
+		else{
+		    return view('admissions/student_view',$data);	  
+		   }	
+	 }
+	 
+	 // pending to view in admin section
+   public  function view_session_attachments($session_id){
+       if($session_id!=''){
+         $data['message_output']   = $this->message_output;
+         $data['session_gallery']  = $this->AdmissionsModel->session_attachment_info($session_id);
+         return view('admissions/sessions/view_session_attachment',$data);
+        }
+       die();
+   }	
+	 
+  public function add($enquiry_id=NULL)
+    {
+        $current_installment_date = date('Y-m-d');
+        if($enquiry_id!=NULL){			
+		   $enquiry_info = $this->AdmissionsModel->enquiry_info($enquiry_id);
+		   $doctor_id    = $enquiry_info->doctor_id;
+		   $enquiry_type = $enquiry_info->enquiry_type;	
+		   if(!$enquiry_info)
+			return redirect()->to(base_url().'/walkings'); 
+		}
+	 	else{
+			$enquiry_info = array();
+			$enquiry_id   = '0';
+			
+			if($this->request->getVar('doctor_id'))
+			$doctor_id   = $this->request->getVar('doctor_id');
+			else
+			$doctor_id     = '';
+			$enquiry_type  = '';
+		  }
+		
+		 if($this->request->getMethod() == 'post'){		     	     	     
+		     
+		    $firstName             = $this->request->getVar('firstName');
+		    $lastName              = $this->request->getVar('lastName');
+	        $motherName            = $this->request->getVar('motherName'); 
+		    $motherMobile          = $this->request->getVar('motherMobile');
+            $fatherName            = $this->request->getVar('fatherName');
+			$fatherMobile          = $this->request->getVar('fatherMobile');
+			$Age                   = $this->request->getVar('Age');			
+			$Address               = $this->request->getVar('Address');
+			$PinCode               = $this->request->getVar('PinCode');
+			$StudentGender         = $this->request->getVar('StudentGender');
+			$parent_remarks        = $this->request->getVar('parent_remarks');
+			$our_remarks           = $this->request->getVar('our_remarks');			
+			$JoiningDate           = $this->request->getVar('JoiningDate');
+			$SessionTiming         = '';
+			$mother_occupation     = $this->request->getVar('motherOccupation');
+			$father_occupation     = $this->request->getVar('fatherOccupation');
+			$category_id           = $this->request->getVar('category_id');
+			$EnrollmentFeeDiscount = $this->request->getVar('EnrollmentFeeDiscount');
+	        $EnrollmentFee         = getenv('Default_Enrollment_fee');
+	        $MonthlyFee            = $this->request->getVar('MonthlyFee');
+	        $monthly_fee_status    = $this->request->getVar('monthly_fee_status');
+	        
+	        $diagnosis             = $this->request->getVar('Diagnosis');
+	        $SpeechLevel           = $this->request->getVar('SpeechLevel');
+	        $dis_certificate       = $this->request->getVar('disability_certificate');
+	        $Aaadhaarcard          = $this->request->getVar('Aaadhaarcard');
+	        
+	        
+	        
+	        
+		        if($monthly_fee_status=='p'){
+		            $balance_fee = $this->request->getVar('BalanceFee');
+		        }
+		        else{
+		             $balance_fee = '0';
+		        }
+	        
+	        $alternative_number   = $this->request->getVar('alternative_number');
+	        
+			
+			if($doctor_id=='9999'){
+				$fresh_doctor_name = $this->request->getVar('fresh_doctor_name');
+				if($fresh_doctor_name!=''){
+			   	    $doctor_array  = array("full_name"=>$fresh_doctor_name,'catagory_id'=>$category_id,"entry_time"=>date('Y-m-d H:i:s'));
+				    $doctor_id     = $this->AdmissionsModel->add_doctor($doctor_array,$fresh_doctor_name);
+				  }
+			  }
+			 
+			$rules = [				
+				'firstName' => [
+					'label'  => 'First Name',
+					'rules'  => 'required',
+					'rules'  => "required",
+					'errors' => [
+						'required' => 'Please enter first name',
+					   ]],				
+				  'motherName' => [
+					'label'  => 'Mother Name',
+					'rules'  => "required",
+					'errors' => [
+						'required' => 'Please enter mother name',
+					], 
+				   ],
+				'fatherName' => [
+					'label'  => 'Father Name',
+					'rules'  => "required",
+					'errors' => [
+						'required' => 'Please enter father name',
+					], 
+				   ],
+				'Age' => [
+					'label'  => 'DOB',
+					'rules'  => "required",
+					'errors' => [
+						'required' => 'Please enter dob',
+					], 
+				   ]	
+			];
+			
+            if(!$this->validate($rules)){
+            $data['validation'] = $this->validator->listErrors();
+            }else{
+                
+                      if($EnrollmentFeeDiscount>0){
+					        if($EnrollmentFeeDiscount==100)
+					           $discounted_amount =$EnrollmentFee;
+					        else
+					          $discounted_amount = ($EnrollmentFee*$EnrollmentFeeDiscount)/100;
+					   }
+					  else{
+					        $discounted_amount =0;  
+					      }
+				
+				
+				
+			    $age_on_admission = getAge($Age);
+				$insert_data = [
+				         'enquiry_id'        => $enquiry_id, 
+						 'first_name'        => $firstName,
+						 'last_name'         => $lastName,
+						 'mother_name'       => $motherName,
+						 'mother_mobile'     => $motherMobile,
+                      	 'father_name'       => $fatherName,
+						 'father_mobile'     => $fatherMobile,
+						 'address'           => $Address,
+						 'zip_code'          => $PinCode,
+						 'dob'               => $Age,
+						 'age_on_admission'  => $age_on_admission,
+                         'sex'               => $StudentGender,
+						 'doctor_id'         => $doctor_id,
+						 'enquiry_type'      => $enquiry_type,
+						 'parent_remarks'    => $parent_remarks,
+						 'our_remarks'       => $our_remarks,
+						 'date_of_joining'   => $JoiningDate,
+						 'session_timings'   => '',
+						 'mother_occupation' => $mother_occupation,
+						 'father_occupation' => $father_occupation,
+						 'enrollment_fee'    => $EnrollmentFee,
+						 'enrollment_fee_discount'    => $EnrollmentFeeDiscount,
+						 "discounted_fee"     => $discounted_amount,
+						 "BalanceFee"         => $balance_fee,
+						 "alternative_number" => $alternative_number,
+						 "speech_level"           => $SpeechLevel,
+						 "disability_certificate" => $dis_certificate,
+						 "aadhaar_no"             => $Aaadhaarcard,
+						 "diagnosis"              => $diagnosis,
+						 'entry_time'             => date('Y-m-d H:i:s')			
+					    ];				
+						
+					 $admision_res = $this->AdmissionsModel->add_admission($insert_data,$enquiry_id);
+					if($admision_res=='9999999'){
+					     $this->message_output->set_error('Record already exists');					
+					}
+					else{
+					  
+					  if($admision_res >0){
+					      
+					  if(isset($_FILES['studentPhoto']['name']) && $_FILES['studentPhoto']['name']!=''){
+			     	    $upload_path           = WRITEPATH.'uploads/students/';
+			     	    $student_file_name     = rand().$_FILES['studentPhoto']['name'];
+        		     	move_uploaded_file($_FILES['studentPhoto']['tmp_name'],$upload_path.$student_file_name);
+        			    $update_photo_data = array("photo_path"=> $student_file_name);
+			     	    $this->AdmissionsModel->update_student_photo($update_photo_data,$admision_res);
+			     	
+			     	}
+			     	
+			     	
+					    
+		$uploadData = array();
+		$data       = array();
+		if(isset($_FILES['other_documents']['name']) && $_FILES['other_documents']['name']!=''){
+		$filesCount = count($_FILES['other_documents']['name']);
+		if($filesCount >0){
+		$files = $_FILES['other_documents'];
+		for($i = 0; $i < $filesCount; $i++){
+		    $file_name = rand().$files['name'][$i];
+		    $document_title                         = $_POST['other_document_title'][$i];
+			$_FILES['other_documents']['name']      = $file_name;
+			$_FILES['other_documents']['type']      = $files['type'][$i];
+			$_FILES['other_documents']['tmp_name']  = $files['tmp_name'][$i];
+			$_FILES['other_documents']['error']     = $files['error'][$i];
+			$_FILES['other_documents']['size']      = $files['size'][$i];
+		  
+			$upload_path   = WRITEPATH.'uploads/documents/';
+			move_uploaded_file($files['tmp_name'][$i],$upload_path.$file_name);
+			$uploadData[$i]['file_name']      = $file_name;	
+			$uploadData[$i]['document_title'] = $document_title;	
+		  }						
+		
+	  	  if(!empty($uploadData)){			
+		       foreach($uploadData  as $filedata){	
+		              if($filedata['file_name']!='' && $filedata['document_title']!=''){
+		                 $user_documents_data  = array('admission_id'=>$admision_res,'document_title'=>$filedata['document_title'],'document_filre'=>$filedata['file_name'],'entry_time'=>date('Y-m-d H:i:s'));
+		                 $this->AdmissionsModel->add_student_documents($user_documents_data); 	
+		                }
+		      		}
+		       }
+		   }
+		
+		}
+					 	 
+					        $this->message_output->set_success('Record Inserted successfully');					
+					        return redirect()->to(base_url().'/admissions');
+					    die;
+				     	}
+					else
+					 $this->message_output->set_error('Enquiry already converted to admission');  
+					}
+					
+					
+										 
+									
+			     }			
+		     }
+		
+		$data['enquiry_type_list']    = enquiry_type_list();		
+		$data['enquiry_info']         = $enquiry_info;
+		$data['session_timing_list']  = session_timing_list();
+		$data['message_output']       = $this->message_output;
+		$data['all_doctors']          = $this->AdmissionsModel->AllDoctorsDropdown();
+		$data['all_category']         = $this->AdmissionsModel->AllCategoryDropdown();
+		$data['enrollment_fee']       = '5000';
+	    return view('admissions/add',$data);		
+    }
+	function bulk_fee_entries($fee_counter,$admision_res,$MonthlyFee,$is_paid){
+	    
+	    for($i=$fee_counter;$i<=12;$i++){
+			 $today_date      = date('Y-m-d');
+			 $payment_rcvd_on = date('Y-m-d H:i:s');
+			 $time            = strtotime(date('Y-m-d'));
+			 $due_date        =  date("Y-m-d", strtotime("+".$i." month", $time));
+         	 $payment_rcvd_on = '';
+			 $insert_installment_data = array("admission_id"=>$admision_res,"fee_amount"=>$MonthlyFee,"is_paid"=>$is_paid,
+					                          "due_date"=>$due_date,"payment_rcvd_on"=>$payment_rcvd_on
+					                                     ); 
+			$this->AdmissionsModel->add_admission_fee($insert_installment_data);
+					        
+		}  
+	    
+	}
+	
+	public function edit($admission_id)
+    {
+		if(!$admission_id)
+			return redirect()->to(base_url().'/enquiry'); 
+		
+		if($this->request->getMethod() == 'post'){
+			$firstName             = $this->request->getVar('firstName');
+		    $lastName              = $this->request->getVar('lastName');
+	        $motherName            = $this->request->getVar('motherName'); 
+		    $motherMobile          = $this->request->getVar('motherMobile');
+          	$fatherName            = $this->request->getVar('fatherName');
+			$fatherMobile          = $this->request->getVar('fatherMobile');
+			$motherOccupation      = $this->request->getVar('motherOccupation');
+			$fatherOccupation      = $this->request->getVar('fatherOccupation');
+			$Age                   = $this->request->getVar('Age');			
+			$Address               = $this->request->getVar('Address');
+			$PinCode               = $this->request->getVar('PinCode');
+			$StudentGender         = $this->request->getVar('StudentGender');
+			$parent_remarks        = $this->request->getVar('parent_remarks');
+			$our_remarks           = $this->request->getVar('our_remarks');			
+			$JoiningDate           = $this->request->getVar('JoiningDate');
+			$SessionTiming         = '';//$this->request->getVar('SessionTiming');
+			$mother_occupation     = $this->request->getVar('motherOccupation');
+			$father_occupation     = $this->request->getVar('fatherOccupation');
+			$doctor_id             = $this->request->getVar('doctor_id');
+			$category_id           = $this->request->getVar('category_id');
+			$EnrollmentFeeDiscount = $this->request->getVar('EnrollmentFeeDiscount');
+	        $EnrollmentFee         = getenv('Default_Enrollment_fee');
+	        $MonthlyFee            = $this->request->getVar('MonthlyFee');
+	        $monthly_fee_status    = $this->request->getVar('monthly_fee_status');
+	        $alternative_number    = $this->request->getVar('alternative_number');
+	        $diagnosis             = $this->request->getVar('Diagnosis');
+	        $SpeechLevel           = $this->request->getVar('SpeechLevel');
+	        $dis_certificate       = $this->request->getVar('disability_certificate');
+	        $Aaadhaarcard          = $this->request->getVar('Aaadhaarcard');
+		    if($category_id!=''){
+				  $doctor_array  = array('catagory_id'=>$category_id);
+				  $this->AdmissionsModel->update_doctor($doctor_array,$doctor_id);
+		    	} 
+		    	
+			$rules = [				
+				'firstName' => [
+					'label'  => 'First Name',
+					'rules'  => 'required',
+					'rules'  => "required",
+					'errors' => [
+						'required' => 'Please enter first name',
+					   ] ],				
+				  'motherName' => [
+					'label'  => 'Mother Name',
+					'rules'  => "required",
+					'errors' => [
+						'required' => 'Please enter mother name',
+					], 
+				   ],
+				'fatherName' => [
+					'label'  => 'Father Name',
+					'rules'  => "required",
+					'errors' => [
+						'required' => 'Please enter father name',
+					], 
+				   ],
+				'Age' => [
+					'label'  => 'DOB',
+					'rules'  => "required",
+					'errors' => [
+						'required' => 'Please enter age',
+					], 
+				   ]	
+			    ];
+
+            if(!$this->validate($rules)){
+                $data['validation'] = $this->validator->listErrors();
+            }else{
+                
+                  $age_on_admission = getAge($Age);
+                  $update_data = [
+				       	 'first_name'             => $firstName,
+						 'last_name'              => $lastName,
+						 'mother_name'            => $motherName,
+						 'mother_mobile'          => $motherMobile,
+                         'father_name'            => $fatherName,
+						 'father_mobile'          => $fatherMobile,
+						 'mother_occupation'      => $motherOccupation,
+						 'father_occupation'      => $father_occupation,
+						 'address'                => $Address,
+						 'zip_code'               => $PinCode,
+						 'dob'                    => $Age,
+						 'age_on_admission'       => $age_on_admission,
+                         'sex'                    => $StudentGender,
+						 'doctor_id'              => $doctor_id,
+						 'enquiry_type'           => 0,
+						 'parent_remarks'         => $parent_remarks,
+						 'our_remarks'            => $our_remarks,
+						 'date_of_joining'        => $JoiningDate,
+						 'mother_occupation'      => $mother_occupation,
+						 'father_occupation'      => $father_occupation,
+						 "alternative_number"     => $alternative_number,
+						 "speech_level"           => $SpeechLevel,
+						 "disability_certificate" => $dis_certificate,
+						 "aadhaar_no"             => $Aaadhaarcard,
+						 "diagnosis"              => $diagnosis
+					    ];				
+					  
+			     	$admision_res  = $this->AdmissionsModel->update_admission($update_data,$admission_id);
+			     	if(isset($_FILES['studentPhoto']['name']) && $_FILES['studentPhoto']['name']!=''){
+			     	    $upload_path           = WRITEPATH.'uploads/students/';
+			     	    $student_file_name     = rand().$_FILES['studentPhoto']['name'];
+        		     	move_uploaded_file($_FILES['studentPhoto']['tmp_name'],$upload_path.$student_file_name);
+        			    $update_photo_data     = array("photo_path"=> $student_file_name);
+			     	    $this->AdmissionsModel->update_student_photo($update_photo_data,$admission_id);
+			     	  }
+		
+		$uploadData = array();
+		$data       = array();
+		
+		if(isset($_FILES['other_documents']['name']) && $_FILES['other_documents']['name']!=''){
+		$filesCount = count($_FILES['other_documents']['name']);
+		if($filesCount >0){
+		$files = $_FILES['other_documents'];
+		for($i = 0; $i < $filesCount; $i++){
+		    if(!empty($files['name'][$i])){
+        		    $file_name = rand().$files['name'][$i];
+        		    $document_title                         = $_POST['other_document_title'][$i];
+        			$_FILES['other_documents']['name']      = $file_name;
+        			$_FILES['other_documents']['type']      = $files['type'][$i];
+        			$_FILES['other_documents']['tmp_name']  = $files['tmp_name'][$i];
+        			$_FILES['other_documents']['error']     = $files['error'][$i];
+        			$_FILES['other_documents']['size']      = $files['size'][$i];
+        		  
+        			$upload_path   = WRITEPATH.'uploads/documents/';
+        			move_uploaded_file($files['tmp_name'][$i],$upload_path.$file_name);
+        			$uploadData[$i]['file_name']      = $file_name;	
+        			$uploadData[$i]['document_title'] = $document_title;	
+		        }
+		  }						
+		
+	  	  if(!empty($uploadData)){			
+		       foreach($uploadData  as $filedata){	
+		              if($filedata['file_name']!='' && $filedata['document_title']!=''){
+		                  $user_documents_data  = array('admission_id'=>$admission_id,'document_title'=>$filedata['document_title'],'document_filre'=>$filedata['file_name'],'entry_time'=>date('Y-m-d H:i:s'));
+		                  $this->AdmissionsModel->add_student_documents($user_documents_data); 	
+		               }
+		      		}
+		        }
+		    }
+		
+		}
+		
+        		if(isset($_POST['check_doc']) && $_POST['check_doc']!=''){
+        		$doc_filesCount = count($_POST['check_doc']);
+        			for($i = 0; $i < $doc_filesCount; $i++){
+        		            $exists_doc_id   = $_POST['check_doc'][$i];
+        		            $document_title  = $_POST['other_document_title'.$exists_doc_id];              
+        		         	$files           = $_FILES['other_documents'.$exists_doc_id];
+        		         	
+                		if($document_title!=''){ // if title of the document changed
+                	  	  $user_documents_data  = array('document_title'=>$document_title);
+        		          $this->AdmissionsModel->update_student_documents($user_documents_data,$exists_doc_id);  
+                		}
+        		        if($files['name']!=''){// if file upload to change last documnent
+        		         	$file_name       = rand().$files['name'];
+        		         	$upload_path     = WRITEPATH.'uploads/documents/';
+                			move_uploaded_file($files['tmp_name'],$upload_path.$file_name);
+        		            $user_documents_data  = array('document_filre'=>$file_name);
+        		            $this->AdmissionsModel->update_student_documents($user_documents_data,$exists_doc_id);
+        		        }   
+        			}
+        		}
+        
+        	//delete documents
+        	$remdocid = $this->request->getVar('remdocid');
+        	if($remdocid!=''){
+        	    $remdocids = explode(",",$remdocid);
+        	    foreach($remdocids as $docid){
+        	        $this->AdmissionsModel->DeleteStudentDocument($docid);
+        	    }
+        	    
+        	}
+		
+			$this->message_output->set_success('Record Updated successfully');
+			return redirect()->to(base_url().'/admissions'); 
+			die;				
+			     }			
+		     }
+		
+		$enquiry_info                   = $this->AdmissionsModel->admission_info($admission_id);
+		$data['enquiry_type_list']      = enquiry_type_list();		
+		$data['enquiry_info']           = $enquiry_info;
+		$data['session_timing_list']    = session_timing_list();
+		$data['message_output']         = $this->message_output;
+		$data['admission_id']           = $admission_id;
+		$data['referral_category_info'] = $this->AdmissionsModel->GetDoctorCategory($enquiry_info->doctor_id);
+		$data['student_documents']      = $this->AdmissionsModel->get_studnet_documents($admission_id);
+		$data['all_doctors']            = $this->AdmissionsModel->AllDoctorsDropdown();
+		$data['all_category']           = $this->AdmissionsModel->AllCategoryDropdown();
+	    return view('admissions/edit',$data);		
+    }
+	
+   public function deleteRecord($id)
+	{	 
+	    $DeleteRec = $this->EnquiryModel->deleteRecord($id);
+		if($DeleteRec){
+			$this->message_output->set_success('Record Deleted successfully');
+		} else {
+			$this->message_output->set_error( 'Please try again! Error while deleting record.');
+		}
+		return redirect()->to(base_url().'/enquiry'); 	
+		 
+	}
+
+public function mark_active($id)
+	{	 
+	    $DeleteRec = $this->AdmissionsModel->markactiveRecord($id);
+		if($DeleteRec){
+			$this->message_output->set_success('Record marked active successfully');
+		} else {
+			$this->message_output->set_error( 'Please try again! Error while deleting record.');
+		}
+		return redirect()->to(base_url().'/admissions'); 	
+	}
+	
+   public function mark_left($id)
+	{	 
+	    $DeleteRec = $this->AdmissionsModel->markleftRecord($id);
+		if($DeleteRec){
+			$this->message_output->set_success('Record marked left successfully');
+		} else {
+			$this->message_output->set_error( 'Please try again! Error while deleting record.');
+		}
+		return redirect()->to(base_url().'/admissions'); 	
+	}
+}
