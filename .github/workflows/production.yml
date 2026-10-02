@@ -87,13 +87,24 @@ jobs:
             --no-owner
             --no-group
             --chmod=D755,F644
+            --delete-after
+            --max-delete=500
           )
 
-          # Paths that must never be uploaded, overwritten or deleted on the server.
+          # Mirror deploy: files on the server that are not in the build are deleted
+          # (after a successful upload). Paths listed here are never uploaded,
+          # overwritten or deleted. --max-delete aborts if far more files than expected would go.
           EXCLUDES=(
             --exclude='/old_backup/'
             --exclude='.htaccess'
             --exclude='.user.ini'
+            --exclude='php.ini'
+            --exclude='.ftpquota'
+            --exclude='error_log'
+            --exclude='/.well-known/'
+            --exclude='/cgi-bin/'
+            --exclude='/img/'
+            --exclude='/customer_panel.zip'
             --exclude='.git/'
             --exclude='.github/'
             --exclude='.gitignore'
