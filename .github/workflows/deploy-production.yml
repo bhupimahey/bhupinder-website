@@ -3,15 +3,6 @@ name: Deploy to Production
 # Manual deploys only: Actions > Deploy to Production > Run workflow.
 on:
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: "Dry run (list what would change, upload nothing)"
-        type: boolean
-        default: true
-      delete_extra:
-        description: "Delete server files that are not in the repo (excluded paths stay protected)"
-        type: boolean
-        default: false
 
 # Never run two deployments at the same time; queue instead of cancelling mid-upload.
 concurrency:
@@ -85,8 +76,6 @@ jobs:
           PRD_HOST: ${{ secrets.PRD_HOST }}
           PRD_USER: ${{ secrets.PRD_USER }}
           SSH_PORT: ${{ vars.PRD_SSH_PORT || '22' }}
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
-          DELETE_EXTRA: ${{ github.event_name == 'workflow_dispatch' && inputs.delete_extra }}
         run: |
           set -euo pipefail
 
@@ -98,23 +87,29 @@ jobs:
             --no-owner
             --no-group
             --chmod=D755,F644
+            --delete-after
+            --max-delete=500
           )
 
-          # Paths that must never be uploaded, overwritten or deleted on the server.
+          # Mirror deploy: files on the server that are not in the build are deleted
+          # (after a successful upload). Paths listed here are never uploaded,
+          # overwritten or deleted. --max-delete aborts if far more files than expected would go.
           EXCLUDES=(
             --exclude='/old_backup/'
             --exclude='.htaccess'
             --exclude='.user.ini'
+            --exclude='php.ini'
+            --exclude='.ftpquota'
+            --exclude='error_log'
+            --exclude='/.well-known/'
+            --exclude='/cgi-bin/'
+            --exclude='/img/'
+            --exclude='/customer_panel.zip'
             --exclude='.git/'
             --exclude='.github/'
             --exclude='.gitignore'
             --exclude='node_modules/'
           )
-
-          [ "$DRY_RUN" = "true" ]      && OPTS+=(--dry-run)
-          [ "$DELETE_EXTRA" = "true" ] && OPTS+=(--delete)
-
-          echo "Dry run: $DRY_RUN | Delete extra files: $DELETE_EXTRA"
 
           rsync "${OPTS[@]}" "${EXCLUDES[@]}" \
             -e "ssh -i $HOME/.ssh/deploy_key -p $SSH_PORT -o StrictHostKeyChecking=yes" \
